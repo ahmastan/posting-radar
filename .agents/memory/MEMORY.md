@@ -1,0 +1,1 @@
+- [Posting Radar product rules](posting-radar-product.md) — genuine run telemetry, durable cross-device tracking, and separate read-only replay.
