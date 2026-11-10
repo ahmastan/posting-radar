@@ -13,7 +13,7 @@ Support multiple independent accounts, but sign-in is not required to use the ap
 
 **Why:** The user explicitly clarified optional sign-in and selected initial import.
 
-**How to apply:** Keep browsing and running checks accessible to guests. Require an account for durable personal tracking and preserve guest-entered filters and visible results through sign-in.
+**How to apply:** Keep browsing and running checks accessible to guests, explicitly including previews of internship postings without an account. Require an account for durable personal tracking and preserve guest-entered filters and visible results through sign-in.
 
 Guest filters and the guest baseline are browser-specific; server-side guest runs are protected by an anonymous session. Guests see a sign-in prompt instead of saved tracker entries. Preserve filters and results through sign-in and explicitly offer to save current matches.
 
