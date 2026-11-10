@@ -1,0 +1,23 @@
+kind = "web"
+previewPath = "/"
+title = "Posting Radar"
+description = "Monitor new-grad and summer internships with saved preferences, a cross-device tracker, and real replayable pipeline events."
+version = "1.0.0"
+id = "artifacts/posting-radar"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23652
+
+[services.development]
+run = "pnpm --filter @workspace/posting-radar run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/posting-radar", "run", "build" ]
+run = ["pnpm", "--filter", "@workspace/posting-radar", "run", "serve"]
+
+[services.env]
+PORT = "23652"
+BASE_PATH = "/"
