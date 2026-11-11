@@ -51,10 +51,24 @@ export async function processRun(run: { id: string; user_id: string; preferences
       failedStep = "snapshot";
       const snapshotId = await events.step("snapshot", sourceId, "Server", "Database", async () => {
         if (downloaded.dataOrigin === "cache") return { value: cached!.id, summary: "Kept last validated snapshot; no fresh download claimed", dataOrigin: "cache" as const };
-        const id = randomUUID();
-        await pool.query(`INSERT INTO radar_snapshots(id,source_id,content_hash,raw,rows,parser_version,etag,last_modified)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [id, sourceId, hash(downloaded.raw), downloaded.raw, JSON.stringify(parsed), PARSER_VERSION, downloaded.etag || null, downloaded.lastModified || null]);
-        return { value: id, summary: "Validated snapshot saved for audit and future recovery", dataOrigin: "live" as const };
+        const contentHash = hash(downloaded.raw);
+        return transaction(async db => {
+          // Serialize snapshot decisions across accounts, not just within this user's run.
+          await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [`radar-snapshot:${sourceId}`]);
+          const latest = (await db.query(`SELECT id,content_hash FROM radar_snapshots
+            WHERE source_id=$1 AND validated AND parser_version=$2 ORDER BY fetched_at DESC LIMIT 1`,
+            [sourceId, PARSER_VERSION])).rows[0];
+          if (latest?.content_hash === contentHash) {
+            // Keep immutable content, but refresh the successful validation time and HTTP validators.
+            await db.query(`UPDATE radar_snapshots SET fetched_at=clock_timestamp(),etag=$2,last_modified=$3 WHERE id=$1`,
+              [latest.id, downloaded.etag || null, downloaded.lastModified || null]);
+            return { value: latest.id as string, summary: "Unchanged content — reused validated snapshot; live validation refreshed", dataOrigin: "live" as const };
+          }
+          const id = randomUUID();
+          await db.query(`INSERT INTO radar_snapshots(id,source_id,content_hash,raw,rows,parser_version,etag,last_modified)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [id, sourceId, contentHash, downloaded.raw, JSON.stringify(parsed), PARSER_VERSION, downloaded.etag || null, downloaded.lastModified || null]);
+          return { value: id, summary: "Validated snapshot saved for audit and future recovery", dataOrigin: "live" as const };
+        });
       });
       failedStep = "diff";
       const candidates = await events.step("diff", sourceId, "Database", "Server", async () => {

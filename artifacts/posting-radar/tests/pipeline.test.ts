@@ -63,6 +63,54 @@ test("stored legacy preferences are normalized before a sweep freezes and applie
   assert.equal(result.totals.inserted, 1);
   assert.equal(result.results![0].posting.url, "https://example.org/legacy-hybrid");
 });
+test("unchanged live content reuses snapshots across accounts while refreshing cursors and validators", async () => {
+  const source = "pittcsc";
+  const count = async () => (await pool.query("SELECT count(*)::int AS count FROM radar_snapshots WHERE source_id=$1", [source])).rows[0].count;
+  const first = await run("snapshot-user", [source]);
+  const id = first.sourceResults[0].candidateSnapshotId;
+  assert(id);
+  assert.equal(await count(), 1);
+  await pool.query("UPDATE radar_cursors SET processed_at=now()-interval '1 day' WHERE user_id='snapshot-user'");
+  await pool.query("UPDATE radar_snapshots SET fetched_at=now()-interval '1 day' WHERE id=$1", [id]);
+  const repeat = await run("snapshot-user", [source], (async () => new Response(fixture, {
+    headers: { etag: '"refreshed"', "last-modified": "Tue, 10 Nov 2026 12:00:00 GMT" },
+  })) as typeof fetch);
+  assert.equal(await count(), 1);
+  assert.equal(repeat.sourceResults[0].candidateSnapshotId, id);
+  assert.equal(repeat.sourceResults[0].baselineSnapshotId, id);
+  assert.equal(repeat.sourceResults[0].outcome, "succeeded");
+  assert.equal(repeat.sourceResults[0].dataOrigin, "live");
+  assert.equal(repeat.totals.inserted, 0);
+  assert.equal(repeat.totals.newSinceBaseline, 0);
+  const cursor = (await pool.query("SELECT * FROM radar_cursors WHERE user_id='snapshot-user'")).rows[0];
+  assert.equal(cursor.snapshot_id, id);
+  assert(new Date(cursor.processed_at).getTime() > Date.now() - 60_000);
+  const snapshot = (await pool.query("SELECT * FROM radar_snapshots WHERE id=$1", [id])).rows[0];
+  assert.equal(snapshot.etag, '"refreshed"');
+  assert.equal(snapshot.last_modified, "Tue, 10 Nov 2026 12:00:00 GMT");
+  assert(new Date(snapshot.fetched_at).getTime() > Date.now() - 60_000);
+  const events = await readEvents(repeat.id);
+  assert(events.some(e => e.step === "snapshot" && e.phase === "succeeded" && e.dataOrigin === "live" && /reused/.test(e.summary)));
+  assert(events.some(e => e.step === "save" && e.phase === "succeeded" && e.counts?.cursorAdvanced === 1));
+  const otherUser = await run("snapshot-other", [source]);
+  assert.equal(otherUser.totals.inserted, 3);
+  assert.equal(otherUser.sourceResults[0].candidateSnapshotId, id);
+  assert.equal(await count(), 1);
+  const revalidated = await run("snapshot-user", [source], (async () => new Response(null, { status: 304 })) as typeof fetch);
+  assert.equal(revalidated.sourceResults[0].candidateSnapshotId, id);
+  assert.equal(await count(), 1);
+  const changed = fixture.replace("Software Engineer Intern", "Updated Software Engineer Intern");
+  const fetchChanged = (async () => new Response(changed)) as typeof fetch;
+  const concurrent = await Promise.all([
+    run("snapshot-concurrent-a", [source], fetchChanged),
+    run("snapshot-concurrent-b", [source], fetchChanged),
+  ]);
+  assert(concurrent.every(r => r.state === "succeeded"));
+  const changedId = concurrent[0].sourceResults[0].candidateSnapshotId;
+  assert.notEqual(changedId, id);
+  assert.equal(concurrent[1].sourceResults[0].candidateSnapshotId, changedId);
+  assert.equal(await count(), 2);
+});
 test("idempotent/concurrent requests, account isolation, active serialization", async () => {
   await ensureUser("u2");
   const ids = await Promise.all([createRun("u2", ["internships"], "same-key-001", 1), createRun("u2", ["internships"], "same-key-001", 1)]);
