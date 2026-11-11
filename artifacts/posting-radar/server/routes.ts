@@ -9,6 +9,7 @@ import { readEvents } from "./events.js";
 import { guestOwner, createGuest } from "./guest-session.js";
 import { getGuestHandoff, saveGuestMatches } from "./handoff.js";
 import { addUserSource, listSources, removeUserSource } from "./user-sources.js";
+import { trackerCsv, trackerQuery, trackerSelection } from "./tracker-export.js";
 const uuid = z.string().uuid();
 const active = new Set(["queued", "running"]);
 export function createRouter() {
@@ -137,20 +138,22 @@ export function createRouter() {
       }
     }
   });
+  router.get("/tracker/export", async (req, res) => {
+    if (res.locals.isGuest) throw new HttpError(401, "Sign in to export your personal tracker.");
+    const query = trackerQuery.parse(req.query);
+    const { params, where, orderBy } = trackerSelection(res.locals.userId, query);
+    const rows = await pool.query(`${trackerSelect.replace("SELECT ", 'SELECT t.updated_at AS "updatedAt", ')} ${where} ${orderBy}`, params);
+    const sources = await listSources(res.locals.userId);
+    res.set({
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="posting-radar-tracker-${query.status || "all"}-${new Date().toISOString().slice(0, 10)}.csv"`,
+      "Cache-Control": "no-store"
+    }).send(trackerCsv(rows.rows, new Map(sources.map(s => [s.id, s.name]))));
+  });
   router.get("/tracker", async (req, res) => {
     if (res.locals.isGuest) throw new HttpError(401, "Sign in to save and track applications. Your guest filters and results will remain available.");
-    const query = z.object({
-      status: z.enum(["", "saved", "applied", "skipped"]).default(""),
-      source: z.string().max(40).default(""), page: z.coerce.number().int().min(1).max(100000).default(1),
-      search: z.string().max(120).default(""),
-      sort: z.enum(["added", "posted", "posted-asc"]).default("added")
-    }).parse(req.query);
-    const params = [res.locals.userId, query.status, query.source, query.search];
-    const where = `WHERE t.user_id=$1 AND ($2='' OR t.status=$2) AND ($3='' OR t.source_id=$3)
-      AND ($4='' OR p.payload->>'company' ILIKE '%'||$4||'%' OR p.payload->>'role' ILIKE '%'||$4||'%')`;
-    const orderBy = query.sort === "posted" ? `ORDER BY (p.payload->>'postedAt') DESC NULLS LAST,t.created_at DESC,t.id`
-      : query.sort === "posted-asc" ? `ORDER BY (p.payload->>'postedAt') ASC NULLS LAST,t.created_at DESC,t.id`
-      : `ORDER BY t.created_at DESC,t.id`;
+    const query = trackerQuery.extend({ page: z.coerce.number().int().min(1).max(100000).default(1) }).parse(req.query);
+    const { params, where, orderBy } = trackerSelection(res.locals.userId, query);
     const count = await pool.query(`SELECT count(*)::int AS total FROM radar_tracker t JOIN radar_postings p ON p.identity=t.identity ${where}`, params);
     const rows = await pool.query(`${trackerSelect} ${where} ${orderBy} LIMIT 30 OFFSET $5`, [...params, (query.page - 1) * 30]);
     const stats = (await pool.query("SELECT status,count(*)::int AS count FROM radar_tracker WHERE user_id=$1 GROUP BY status", [res.locals.userId])).rows;

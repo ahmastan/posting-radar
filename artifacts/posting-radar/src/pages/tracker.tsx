@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, ExternalLink, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Search } from "lucide-react";
 import { ApiError, updateStatus, useSources, useTracker, type TrackerEntry } from "@/lib/api";
 import { Bone, ErrorState, PageHead, Tag } from "@/components/bits";
 import { fmtTime, humanize } from "@/lib/local";
@@ -15,6 +15,8 @@ export default function Tracker() {
   const [input, setInput] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("added");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     clearTimeout(timer.current);
@@ -26,9 +28,40 @@ export default function Tracker() {
   const sources = useSources();
   const pages = q.data ? Math.max(1, Math.ceil(q.data.total / q.data.pageSize)) : 1;
 
+  async function downloadCsv() {
+    setExporting(true); setExportError("");
+    try {
+      const query = new URLSearchParams({ status, source, search: input.trim(), sort });
+      const response = await fetch(`/api/tracker/export?${query}`);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Export failed. Please try again.");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `posting-radar-tracker-${status || "all"}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Give mobile browsers time to start reading the download.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "Export failed. Please try again.");
+    } finally { setExporting(false); }
+  }
+
   return (
     <>
       <PageHead kicker="Durable record" title="Tracker" />
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p id="export-help" className="text-sm text-muted-foreground">Export all matching entries, across every page. Current filters apply.</p>
+        <button onClick={downloadCsv} disabled={exporting} aria-describedby="export-help"
+          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-sm border bg-card px-4 py-2 text-sm hover:bg-muted disabled:opacity-50">
+          <Download className="h-4 w-4" aria-hidden="true" />{exporting ? "Exporting…" : "Export CSV"}
+        </button>
+      </div>
+      {exportError && <p role="alert" className="mb-4 text-sm text-[hsl(var(--ph-failed))]">{exportError}</p>}
       <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Status filter">
         {["", ...STATUSES].map((s) => (
           <button key={s || "all"} onClick={() => { setStatus(s); setPage(1); }} aria-pressed={status === s}
