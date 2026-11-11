@@ -91,10 +91,10 @@ function AuthFrame({ children }: { children: ReactNode }) {
   );
 }
 function SignInPage() {
-  return <AuthFrame><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} /></AuthFrame>;
+  return <AuthFrame><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallbackRedirectUrl={`${basePath}/user-portal`} /></AuthFrame>;
 }
 function SignUpPage() {
-  return <AuthFrame><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} /></AuthFrame>;
+  return <AuthFrame><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} fallbackRedirectUrl={`${basePath}/user-portal`} /></AuthFrame>;
 }
 
 function ClerkQueryClientCacheInvalidator() {

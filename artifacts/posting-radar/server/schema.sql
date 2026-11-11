@@ -70,3 +70,9 @@ CREATE TABLE IF NOT EXISTS radar_guest_imports (
   guest_run_id uuid NOT NULL REFERENCES radar_runs(id), user_id text NOT NULL REFERENCES radar_users(id),
   account_run_id uuid NOT NULL REFERENCES radar_runs(id), PRIMARY KEY(guest_run_id,user_id)
 );
+CREATE TABLE IF NOT EXISTS radar_user_sources (
+  user_id text NOT NULL REFERENCES radar_users(id), id text NOT NULL,
+  repo text NOT NULL, branch text NOT NULL, path text NOT NULL, name text NOT NULL,
+  season text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(user_id,id)
+);

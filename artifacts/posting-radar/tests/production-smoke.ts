@@ -10,7 +10,7 @@ try {
   let ready = false;
   for (let i = 0; i < 60; i++) {
     if (child.exitCode != null) throw new Error(`Production process exited: ${output}`);
-    try { ready = (await fetch(`${base}/api/sources`)).ok; if (ready) break; } catch { /* wait for listening socket */ }
+    try { ready = (await fetch(`${base}/api/me`, { headers: { "X-Forwarded-Proto": "https" } })).ok; if (ready) break; } catch { /* wait for listening socket */ }
     await new Promise(r => setTimeout(r, 100));
   }
   assert(ready, `Production server did not start: ${output}`);

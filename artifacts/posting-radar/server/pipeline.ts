@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { pool, transaction } from "./db.js";
-import { sources } from "./config.js";
+import { resolveSource } from "./user-sources.js";
 import { Events, errorInfo, LostClaim } from "./events.js";
 import { fetchSource, type Snapshot } from "./ingestion.js";
 import { parseReadme, matchPosting, hash, PARSER_VERSION } from "./parser.js";
@@ -15,7 +15,19 @@ export async function processRun(run: { id: string; user_id: string; preferences
   const isGuest = run.user_id.startsWith("guest:");
   await events.step("worker", undefined, "Database", "Server", async () => ({ value: null, summary: "Durable queued request claimed by worker" }));
   for (const sourceId of run.requested_sources) {
-    const source = sources.find(s => s.id === sourceId)!;
+    const source = await resolveSource(run.user_id, sourceId);
+    if (!source) {
+      const error = { code: "SOURCE_REMOVED", message: "This source was removed before the run reached it." };
+      await events.append({ sourceId, step: "baseline", phase: "failed", fromLayer: "Database", toLayer: "Server", summary: error.message, error });
+      for (const step of ["fetch", "parse", "snapshot", "diff", "filter", "dedupe", "save"]) await events.skip(step, sourceId, "Skipped because the source no longer exists");
+      const result: SourceResult = { sourceId, outcome: "failed", counts: { inserted: 0 }, error };
+      await transaction(async db => {
+        await assertClaim(db, run.id, run.worker_token);
+        await db.query("UPDATE radar_run_sources SET result=$3 WHERE run_id=$1 AND source_id=$2", [run.id, sourceId, result]);
+      });
+      results.push(result);
+      continue;
+    }
     let failedStep = "baseline";
     let saveStart = 0;
     let counts: Record<string, number> = {};

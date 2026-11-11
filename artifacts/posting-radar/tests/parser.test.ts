@@ -29,7 +29,11 @@ test("GFM escaped pipes, HTML and markdown application links, sponsorship is exp
 });
 test("malformed/missing columns/empty active cells are errors, legitimate empty table is not", () => {
   assert.equal(parseReadme(table("")).length, 0);
-  for (const raw of ["not a table", table(row()).replace("Location", "Office"), table("| Acme | Eng | NYC | |"), "<table><tr><th>Company</th>"]) {
+  // An active row without an application URL is an ambiguous observation, not a table failure.
+  const noLink = parseReadme(table("| Acme | Eng | NYC | |"));
+  assert.equal(noLink.length, 1);
+  assert.equal(noLink[0].ambiguous, true);
+  for (const raw of ["not a table", table(row()).replace("Location", "Office"), "<table><tr><th>Company</th>"]) {
     assert.throws(() => parseReadme(raw));
   }
   assert.throws(() => parseReadme(table(row("Engineer 🛂")).replace("Does NOT offer sponsorship", "Unknown policy")));
@@ -44,7 +48,9 @@ test("location OR/category OR/group AND/exclusion override and unknown policy", 
   const p = parseReadme(table(row()))[0];
   assert(matchPosting(p, defaults).matches);
   assert(matchPosting(p, { ...defaults, locations: ["Boston", "NYC"] }).matches);
-  assert(!matchPosting(p, { ...defaults, remotePolicy: "exclude" }).matches);
+  assert(!matchPosting(p, { ...defaults, workModel: "onsite" }).matches);
+  assert(matchPosting(p, { ...defaults, workModel: "remote" }).matches);
+  assert(!matchPosting(p, { ...defaults, workModel: "hybrid" }).matches);
   assert(!matchPosting(p, { ...defaults, excludedCompanies: ["acme"] }).matches);
   assert(!matchPosting(p, { ...defaults, includeUnknown: false }).matches);
   assert(matchPosting(p, { ...defaults, sponsorship: "required", includeUnknown: true }).matches);

@@ -115,9 +115,13 @@ export default function PreferencesPage() {
           <textarea id="locs" rows={5} value={draft.locations} onChange={(e) => update({ locations: e.target.value })} placeholder={"New York, NY\nSeattle\nToronto"}
             className="w-full rounded-sm border bg-background p-3 font-mono text-sm outline-none focus:border-primary" />
           <fieldset className="mt-4">
-            <legend className="mb-2 text-xs text-muted-foreground">Remote postings</legend>
-            <Seg value={draft.remotePolicy} onChange={(v) => update({ remotePolicy: v })} options={[["any", "Include"], ["only", "Remote only"], ["exclude", "Exclude"]]} />
-            <p className="mt-2 text-xs text-muted-foreground">Remote only still requires a listed location to match, if you listed any.</p>
+            <legend className="mb-2 text-xs text-muted-foreground">Work model</legend>
+            <Seg value={draft.workModel} onChange={(v) => update({ workModel: v })} options={[["any", "Any"], ["remote", "Remote"], ["hybrid", "Hybrid"], ["onsite", "In person"]]} />
+          </fieldset>
+          <fieldset className="mt-4">
+            <legend className="mb-2 text-xs text-muted-foreground">Pay</legend>
+            <Seg value={draft.pay} onChange={(v) => update({ pay: v })} options={[["any", "Any"], ["paid", "Paid only"], ["unpaid", "Unpaid only"]]} />
+            <p className="mt-2 text-xs text-muted-foreground">Most repos don't list pay, so Paid only keeps postings that explicitly mention compensation.</p>
           </fieldset>
         </Panel>
 

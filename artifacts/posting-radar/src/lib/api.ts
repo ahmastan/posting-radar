@@ -1,16 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
-export const roles = ["Software Engineering", "Product Management", "Data Science, AI & Machine Learning", "Quantitative Finance", "Hardware Engineering", "Other"] as const;
+export const roles = ["Software Engineering", "Product Management", "Data Science, AI & Machine Learning", "Quantitative Finance", "Hardware Engineering", "Mechanical Engineering", "Electrical Engineering", "Civil & Other Engineering", "Other"] as const;
 export interface Preferences {
-  revision: number; locations: string[]; remotePolicy: "any" | "only" | "exclude";
+  revision: number; locations: string[]; workModel: "any" | "remote" | "hybrid" | "onsite"; pay: "any" | "paid" | "unpaid";
   roles: string[]; sponsorship: "any" | "required"; includeUnknown: boolean; excludedCompanies: string[];
 }
 export interface Source {
   id: string; name: string; repo: string; branch: string; path: string; season: string; url: string; stars: number;
-  cachedAt?: string | null; available: boolean;
+  cachedAt?: string | null; available: boolean; custom?: boolean;
 }
 export interface Posting {
   identity: string; company: string; role: string; locations: string[]; category: string;
-  url: string; remote: boolean; sponsorship: "unknown" | "unavailable" | "citizenship" | "available";
+  url: string; remote: boolean; workModel: "remote" | "hybrid" | "onsite" | "unknown";
+  pay: "paid" | "unpaid" | "unknown"; postedAt?: string;
+  sponsorship: "unknown" | "unavailable" | "citizenship" | "available";
   closed: boolean; ambiguous: boolean;
 }
 export interface TrackerEntry {
@@ -43,7 +45,7 @@ export interface GuestMatch {
 }
 export interface Account { id: string; isGuest: boolean; guestSessionAvailable: boolean }
 export interface GuestHandoff { available: boolean; guestUserId?: string; preferences?: Preferences; run?: Run; matches: GuestMatch[]; imported: boolean }
-export const useAccount = () => useQuery({ queryKey: ["account"], queryFn: () => api<Account>("/me"), staleTime: 60_000 });
+export const useAccount = () => useQuery({ queryKey: ["account"], queryFn: () => api<Account>("/me") });
 export const useGuestHandoff = (enabled: boolean) => {
   let runId: string | null = null;
   try { runId = sessionStorage.getItem("posting-radar:guest-visible-run"); } catch { /* latest finished run is available without storage */ }
@@ -60,13 +62,16 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   return data;
 }
 export const useSources = () => useQuery({ queryKey: ["sources"], queryFn: () => api<Source[]>("/sources") });
+export const addCustomSource = (input: { repo: string; branch?: string; path?: string; name?: string; season?: string }) =>
+  api<Source>("/sources/custom", { method: "POST", body: JSON.stringify(input) });
+export const removeCustomSource = (id: string) => api<{ removed: boolean }>(`/sources/custom/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const usePreferences = () => useQuery({ queryKey: ["preferences"], queryFn: () => api<Preferences>("/preferences") });
 export const useRuns = () => useQuery({ queryKey: ["runs"], queryFn: () => api<Run[]>("/runs"), refetchInterval: 3000 });
 export const useRun = (id?: string) => useQuery({ queryKey: ["run", id], queryFn: () => api<Run>(`/runs/${id}`), enabled: !!id,
   refetchInterval: q => q.state.data && ["queued", "running"].includes(q.state.data.state) ? 2000 : false });
-export const useTracker = (status = "", source = "", page = 1, search = "") => useQuery({
-  queryKey: ["tracker", status, source, page, search],
-  queryFn: () => api<{ entries: TrackerEntry[]; total: number; page: number; pageSize: number; stats: Record<string, number> }>(`/tracker?status=${encodeURIComponent(status)}&source=${encodeURIComponent(source)}&page=${page}&search=${encodeURIComponent(search)}`)
+export const useTracker = (status = "", source = "", page = 1, search = "", sort = "") => useQuery({
+  queryKey: ["tracker", status, source, page, search, sort],
+  queryFn: () => api<{ entries: TrackerEntry[]; total: number; page: number; pageSize: number; stats: Record<string, number> }>(`/tracker?status=${encodeURIComponent(status)}&source=${encodeURIComponent(source)}&page=${page}&search=${encodeURIComponent(search)}&sort=${encodeURIComponent(sort)}`)
 });
 export const savePreferences = (p: Preferences) => api<Preferences>("/preferences", { method: "PUT", body: JSON.stringify(p) });
 export const startRun = (sourceIds: string[], idempotencyKey: string, preferenceRevision: number, retryOf?: string) =>

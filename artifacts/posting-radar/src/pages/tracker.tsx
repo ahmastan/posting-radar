@@ -14,6 +14,7 @@ export default function Tracker() {
   const [page, setPage] = useState(1);
   const [input, setInput] = useState("");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("added");
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     clearTimeout(timer.current);
@@ -21,7 +22,7 @@ export default function Tracker() {
     return () => clearTimeout(timer.current);
   }, [input]);
 
-  const q = useTracker(status, source, page, search);
+  const q = useTracker(status, source, page, search, sort);
   const sources = useSources();
   const pages = q.data ? Math.max(1, Math.ceil(q.data.total / q.data.pageSize)) : 1;
 
@@ -49,6 +50,14 @@ export default function Tracker() {
           <select value={source} onChange={(e) => { setSource(e.target.value); setPage(1); }} className="w-full rounded-sm border bg-card px-3 py-2 text-sm">
             <option value="">All sources</option>
             {sources.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </label>
+        <label className="sm:w-48">
+          <span className="sr-only">Sort</span>
+          <select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }} className="w-full rounded-sm border bg-card px-3 py-2 text-sm">
+            <option value="added">Recently added</option>
+            <option value="posted">Date posted · newest</option>
+            <option value="posted-asc">Date posted · oldest</option>
           </select>
         </label>
       </div>
@@ -110,7 +119,9 @@ function Row({ entry, sourceName }: { entry: TrackerEntry; sourceName?: string }
           <Tag>{p.category}</Tag>
           {p.locations.slice(0, 3).map((l) => <Tag key={l}>{l}</Tag>)}
           {p.locations.length > 3 && <Tag>+{p.locations.length - 3}</Tag>}
-          {p.remote && <Tag>remote</Tag>}
+          {p.workModel && p.workModel !== "unknown" ? <Tag>{p.workModel === "onsite" ? "in person" : p.workModel}</Tag> : p.remote && <Tag>remote</Tag>}
+          {p.pay && p.pay !== "unknown" && <Tag>{p.pay}</Tag>}
+          {p.postedAt && <Tag>posted {p.postedAt}</Tag>}
           <Tag>sponsorship {p.sponsorship}</Tag>
           {p.closed && <Tag>closed</Tag>}
           {p.ambiguous && <Tag>ambiguous row</Tag>}

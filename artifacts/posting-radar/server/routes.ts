@@ -3,21 +3,18 @@ import { getAuth } from "@clerk/express";
 import { z } from "zod";
 import rateLimit from "express-rate-limit";
 import { pool, transaction } from "./db.js";
-import { sources, preferenceSchema } from "./config.js";
+import { preferenceSchema } from "./config.js";
 import { ensureUser, getRun, createRun, trackerSelect, HttpError } from "./store.js";
 import { readEvents } from "./events.js";
 import { guestOwner, createGuest } from "./guest-session.js";
 import { getGuestHandoff, saveGuestMatches } from "./handoff.js";
+import { addUserSource, listSources, removeUserSource } from "./user-sources.js";
 const uuid = z.string().uuid();
 const active = new Set(["queued", "running"]);
 export function createRouter() {
   const router = Router();
   router.use("/me", rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: "draft-7", legacyHeaders: false,
     message: { error: "Too many session requests. Please try again in a minute." } }));
-  router.get("/sources", async (_req, res) => {
-    const r = await pool.query("SELECT source_id,max(fetched_at) AS cached_at FROM radar_snapshots WHERE validated GROUP BY source_id");
-    res.json(sources.map(s => ({ ...s, cachedAt: r.rows.find(x => x.source_id === s.id)?.cached_at || null })));
-  });
   router.use(async (req: Request, res: Response, next: NextFunction) => {
     const auth = getAuth(req);
     const accountId = auth?.sessionClaims?.userId || auth?.userId;
@@ -29,6 +26,26 @@ export function createRouter() {
     res.locals.isGuest = !authenticated;
     res.locals.guestUserId = guestId;
     next();
+  });
+  router.get("/sources", async (_req, res) => {
+    await ensureUser(res.locals.userId);
+    const r = await pool.query("SELECT source_id,max(fetched_at) AS cached_at FROM radar_snapshots WHERE validated GROUP BY source_id");
+    const mine = await listSources(res.locals.userId);
+    res.json(mine.map(s => ({ ...s, cachedAt: r.rows.find(x => x.source_id === s.id)?.cached_at || null })));
+  });
+  const customSourceSchema = z.object({
+    repo: z.string().trim().min(3).max(200), branch: z.string().trim().max(100).default("main"),
+    path: z.string().trim().max(200).default("README.md"), name: z.string().trim().max(120).default(""),
+    season: z.string().trim().max(80).default("")
+  }).strict();
+  router.post("/sources/custom", async (req, res) => {
+    await ensureUser(res.locals.userId);
+    const body = customSourceSchema.parse(req.body);
+    res.status(201).json(await addUserSource(res.locals.userId, body));
+  });
+  router.delete("/sources/custom/:id", async (req, res) => {
+    await removeUserSource(res.locals.userId, z.string().min(1).max(40).parse(req.params.id));
+    res.json({ removed: true });
   });
   router.get("/me", async (_req, res) => {
     await ensureUser(res.locals.userId);
@@ -68,9 +85,12 @@ export function createRouter() {
   router.post("/runs", runLimit, async (req, res) => {
     await ensureUser(res.locals.userId);
     const body = z.object({
-      sourceIds: z.array(z.enum(["new-grad", "internships"])).min(1).max(2).refine(v => new Set(v).size === v.length, "Select each source only once."),
+      sourceIds: z.array(z.string().min(1).max(40)).min(1).max(10).refine(v => new Set(v).size === v.length, "Select each source only once."),
       idempotencyKey: z.string().min(8).max(120), preferenceRevision: z.number().int().positive(), retryOf: uuid.optional()
     }).strict().parse(req.body);
+    const known = new Set((await listSources(res.locals.userId)).map(s => s.id));
+    const unknown = body.sourceIds.filter(id => !known.has(id));
+    if (unknown.length) throw new HttpError(400, `Unknown source${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}. Add the repo first.`);
     const id = await createRun(res.locals.userId, body.sourceIds, body.idempotencyKey, body.preferenceRevision, body.retryOf);
     res.status(202).json({ id, streamUrl: `/api/runs/${id}/events` });
   });
@@ -121,14 +141,18 @@ export function createRouter() {
     if (res.locals.isGuest) throw new HttpError(401, "Sign in to save and track applications. Your guest filters and results will remain available.");
     const query = z.object({
       status: z.enum(["", "saved", "applied", "skipped"]).default(""),
-      source: z.enum(["", "new-grad", "internships"]).default(""), page: z.coerce.number().int().min(1).max(100000).default(1),
-      search: z.string().max(120).default("")
+      source: z.string().max(40).default(""), page: z.coerce.number().int().min(1).max(100000).default(1),
+      search: z.string().max(120).default(""),
+      sort: z.enum(["added", "posted", "posted-asc"]).default("added")
     }).parse(req.query);
     const params = [res.locals.userId, query.status, query.source, query.search];
     const where = `WHERE t.user_id=$1 AND ($2='' OR t.status=$2) AND ($3='' OR t.source_id=$3)
       AND ($4='' OR p.payload->>'company' ILIKE '%'||$4||'%' OR p.payload->>'role' ILIKE '%'||$4||'%')`;
+    const orderBy = query.sort === "posted" ? `ORDER BY (p.payload->>'postedAt') DESC NULLS LAST,t.created_at DESC,t.id`
+      : query.sort === "posted-asc" ? `ORDER BY (p.payload->>'postedAt') ASC NULLS LAST,t.created_at DESC,t.id`
+      : `ORDER BY t.created_at DESC,t.id`;
     const count = await pool.query(`SELECT count(*)::int AS total FROM radar_tracker t JOIN radar_postings p ON p.identity=t.identity ${where}`, params);
-    const rows = await pool.query(`${trackerSelect} ${where} ORDER BY t.created_at DESC,t.id LIMIT 30 OFFSET $5`, [...params, (query.page - 1) * 30]);
+    const rows = await pool.query(`${trackerSelect} ${where} ${orderBy} LIMIT 30 OFFSET $5`, [...params, (query.page - 1) * 30]);
     const stats = (await pool.query("SELECT status,count(*)::int AS count FROM radar_tracker WHERE user_id=$1 GROUP BY status", [res.locals.userId])).rows;
     res.json({ entries: rows.rows, total: count.rows[0].total, page: query.page, pageSize: 30,
       stats: Object.fromEntries(["saved", "applied", "skipped"].map(s => [s, stats.find(x => x.status === s)?.count || 0])) });

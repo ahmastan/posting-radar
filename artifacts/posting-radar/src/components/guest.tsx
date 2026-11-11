@@ -143,7 +143,7 @@ export function GuestHandoffPanel({ sources }: { sources?: Source[] }) {
             <dl className="mt-2 space-y-1 font-mono text-[11px] text-muted-foreground">
               <div>categories: {gp.roles.length ? gp.roles.join(", ") : "all"}</div>
               <div>locations: {gp.locations.length ? gp.locations.join(" | ") : "anywhere"}</div>
-              <div>remote: {gp.remotePolicy} · sponsorship: {gp.sponsorship}{gp.includeUnknown ? " (+unknown)" : ""}</div>
+              <div>work model: {gp.workModel} · pay: {gp.pay} · sponsorship: {gp.sponsorship}{gp.includeUnknown ? " (+unknown)" : ""}</div>
               <div>excluded: {gp.excludedCompanies.length ? gp.excludedCompanies.join(", ") : "none"}</div>
             </dl>
           ) : <p className="mt-2 text-sm text-muted-foreground">No guest filters were saved.</p>}

@@ -8,7 +8,8 @@ export const parseList = (text: string) =>
 export interface PrefDraft {
   baseRevision: number;
   locations: string;
-  remotePolicy: Preferences["remotePolicy"];
+  workModel: Preferences["workModel"];
+  pay: Preferences["pay"];
   roles: string[];
   sponsorship: Preferences["sponsorship"];
   includeUnknown: boolean;
@@ -40,7 +41,8 @@ export function draftFromPrefs(p: Preferences): PrefDraft {
   return {
     baseRevision: p.revision,
     locations: p.locations.join("\n"),
-    remotePolicy: p.remotePolicy,
+    workModel: p.workModel,
+    pay: p.pay,
     roles: [...p.roles],
     sponsorship: p.sponsorship,
     includeUnknown: p.includeUnknown,
@@ -51,7 +53,8 @@ export function prefsFromDraft(d: PrefDraft, revision: number): Preferences {
   return {
     revision,
     locations: parseLines(d.locations),
-    remotePolicy: d.remotePolicy,
+    workModel: d.workModel,
+    pay: d.pay,
     roles: d.roles,
     sponsorship: d.sponsorship,
     includeUnknown: d.includeUnknown,
@@ -60,7 +63,7 @@ export function prefsFromDraft(d: PrefDraft, revision: number): Preferences {
 }
 export function samePrefs(a: Preferences, b: Preferences) {
   const n = (p: Preferences) =>
-    JSON.stringify([p.locations, p.remotePolicy, [...p.roles].sort(), p.sponsorship, p.includeUnknown, p.excludedCompanies]);
+    JSON.stringify([p.locations, p.workModel, p.pay, [...p.roles].sort(), p.sponsorship, p.includeUnknown, p.excludedCompanies]);
   return n(a) === n(b);
 }
 
