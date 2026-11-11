@@ -15,6 +15,12 @@ CREATE TABLE IF NOT EXISTS radar_snapshots (
   fetched_at timestamptz NOT NULL DEFAULT now(), validated boolean NOT NULL DEFAULT true
 );
 CREATE INDEX IF NOT EXISTS radar_snapshot_source ON radar_snapshots(source_id,fetched_at DESC);
+-- Maintenance audit only: content remains in each mapping's retained snapshot.
+-- No automatic retention or cleanup runs at migration/startup time.
+CREATE TABLE IF NOT EXISTS radar_snapshot_cleanups (
+  id uuid PRIMARY KEY, approved_plan_hash text NOT NULL, approved_by text NOT NULL,
+  applied_at timestamptz NOT NULL DEFAULT now(), plan jsonb NOT NULL
+);
 CREATE TABLE IF NOT EXISTS radar_cursors (
   user_id text NOT NULL REFERENCES radar_users(id), source_id text NOT NULL,
   snapshot_id uuid NOT NULL REFERENCES radar_snapshots(id), processed_at timestamptz NOT NULL DEFAULT now(),

@@ -7,7 +7,38 @@
 - The background worker claims saved queue rows independently of HTTP clients. A PostgreSQL session advisory lock elects one worker. Each private commit is fenced by its worker token. On leader restart, unfinished runs and open steps are marked interrupted; successful source commits remain intact.
 - Source match inserts, observations, cursor advancement, source result, and terminal save event share a transaction. Cached fallback may save explicitly labeled observations, but never advances a fresh cursor.
 - Only successfully parsed README bodies become fallback snapshots. HTTP 304 revalidates a validated body. Network/timeout/5xx/rate-limit errors get one retry, with at most a 2-second wait. Each request has a 10-second abort and a 12-MB body limit.
-- Raw snapshots are shared downloads, not private baselines. Snapshot retention is indefinite so historical explanations remain available. No pruning is currently performed.
+- Raw snapshots are shared downloads, not private baselines. Unique content and parser versions are retained indefinitely. No automatic pruning is performed.
+
+## Approved duplicate snapshot maintenance
+
+No cleanup runs on startup, migration, or a sweep. Stop accepting new checks and let
+queued/running checks finish before maintenance. Apply the schema migration first
+using the normal environment-specific migration process; this does not delete data.
+
+1. Run `pnpm --filter @workspace/posting-radar snapshots:cleanup --dry-run`.
+   This prints the exact removed-to-retained ID mappings, reference counts, estimated
+   redundant body bytes, and a plan hash. It makes no persistent changes.
+2. **Obtain the user's explicit approval of that dry-run before applying.** Do not
+   infer approval from permission to build this tool. Keep a normal database backup
+   before maintenance. Do not switch the database target between preview and apply.
+3. Only after approval, run `pnpm --filter @workspace/posting-radar snapshots:cleanup --approve <reviewed-plan-hash> --approved-by <name>`.
+   A changed plan requires a new dry-run and approval. No apply has been run as part
+   of implementing this tool.
+
+Only validated copies with the same source, parser version, hash, exact raw text,
+and parsed JSON are merged, retaining the newest copy and its HTTP/cache metadata.
+Different content, parser versions, parsed results, sources, and invalid snapshots
+are untouched, including older distinct recovery bodies. Cursor timestamps do not
+change. Both run-source foreign keys and embedded result snapshot IDs are remapped;
+all other result fields, run totals, matches, tracker statuses and replay events stay
+unchanged. The audit table retains original reference records, removed HTTP metadata,
+and mappings to the equivalent retained bodies.
+
+Locks prevent concurrent writes and active runs cause refusal, protecting snapshot
+IDs already loaded by workers. Lock/statement timeouts fail safely. Audit writes,
+reference updates and deletion share one transaction: any failure rolls back all of
+them. The byte estimate is logical raw/JSON content, not guaranteed physical disk
+savings; PostgreSQL can reuse deleted space, and this tool does not run `VACUUM FULL`.
 
 ## Identity and matching
 Use canonical application URLs across sources. Remove `utm_*`, and remove `ref`, `source`, `src`, or `gh_src` only when their value is known to be `Simplify`/`GHList`. Preserve other query parameters, paths, and fragments to avoid collapsing distinct jobs. Closed postings lacking application URLs use an explicitly ambiguous SHA-256 company/title/sorted-locations/category fingerprint; these rows are never imported. Active rows lacking a valid URL fail parsing.

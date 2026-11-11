@@ -1,2 +1,3 @@
 - [Posting Radar product rules](posting-radar-product.md) — genuine run telemetry, durable cross-device tracking, and separate read-only replay.
 - [Legacy filter semantics](legacy-filter-semantics.md) — preserve old remote filters and the meaning of Other when converting saved preferences and drafts.
+- [Snapshot maintenance](snapshot-maintenance.md) — building cleanup is not deletion consent; require explicit approval of the dry-run and preserve recovery history.

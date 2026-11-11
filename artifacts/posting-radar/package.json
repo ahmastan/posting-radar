@@ -11,7 +11,8 @@
     "test": "tsx --test tests/*.test.ts",
     "test:guest-browser": "tsx tests/e2e-guest.ts",
     "test:production": "tsx tests/production-smoke.ts",
-    "db:migrate": "tsx server/migrate.ts"
+    "db:migrate": "tsx server/migrate.ts",
+    "snapshots:cleanup": "tsx server/cleanup-snapshots.ts"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
