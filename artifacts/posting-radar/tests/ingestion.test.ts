@@ -28,6 +28,42 @@ test("304 is successful live revalidation; headers sent only with validated cach
   assert.equal(result.dataOrigin, "live"); assert.equal(result.revalidated, true); assert.equal(result.raw, cache.raw);
   assert.equal(new Headers(headers).get("if-none-match"), '"old"');
 });
+const oldModified = "Mon, 09 Nov 2026 12:00:00 GMT";
+const newModified = "Tue, 10 Nov 2026 12:00:00 GMT";
+for (const scenario of [
+  { name: "both validators changed", headers: { etag: '"new"', "last-modified": newModified }, etag: '"new"', lastModified: newModified },
+  { name: "both validators omitted", headers: {}, etag: '"old"', lastModified: oldModified },
+  { name: "only ETag changed", headers: { etag: '"new"' }, etag: '"new"', lastModified: oldModified },
+  { name: "only Last-Modified changed", headers: { "last-modified": newModified }, etag: '"old"', lastModified: newModified }
+]) {
+  test(`304 refreshes supplied validators and retains omitted ones: ${scenario.name}`, async () => {
+    const snapshot: Snapshot = { ...cache, last_modified: oldModified };
+    const requests: Headers[] = [];
+    const transport = (async (_url: unknown, options: RequestInit) => {
+      requests.push(new Headers(options.headers));
+      return new Response(null, { status: 304, headers: requests.length === 1 ? scenario.headers as HeadersInit : {} });
+    }) as typeof fetch;
+    const result = await fetchSource(sources[0], snapshot, fakeEvents() as unknown as Events, transport);
+    assert.equal(result.etag, scenario.etag);
+    assert.equal(result.lastModified, scenario.lastModified);
+    assert.equal(result.raw, snapshot.raw);
+    assert.equal(result.dataOrigin, "live");
+    assert.equal(result.revalidated, true);
+    assert.equal(result.fetchError, undefined);
+    assert.equal(requests[0].get("if-none-match"), snapshot.etag);
+    assert.equal(requests[0].get("if-modified-since"), oldModified);
+
+    // Apply the download's metadata as the pipeline does when reusing a snapshot.
+    const refreshed: Snapshot = { ...snapshot, etag: result.etag, last_modified: result.lastModified };
+    const next = await fetchSource(sources[0], refreshed, fakeEvents() as unknown as Events, transport);
+    assert.equal(requests.length, 2);
+    assert.equal(requests[1].get("if-none-match"), scenario.etag);
+    assert.equal(requests[1].get("if-modified-since"), scenario.lastModified);
+    assert.equal(next.etag, scenario.etag);
+    assert.equal(next.lastModified, scenario.lastModified);
+    assert.equal(next.raw, snapshot.raw);
+  });
+}
 test("network exhaustion without cache fails, 404 gets no retry, invalid HTML not validated here", async () => {
   let calls = 0;
   await assert.rejects(fetchSource(sources[0], undefined, fakeEvents() as unknown as Events, (async () => { calls++; throw new Error("network"); }) as typeof fetch, async () => {}));

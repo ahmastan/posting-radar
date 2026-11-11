@@ -26,7 +26,9 @@ export async function fetchSource(source: Source, cached: Snapshot | undefined, 
         } catch { throw new FetchError("GitHub request failed or timed out (10 second limit).", "GITHUB_NETWORK"); }
         if (response.status === 304) {
           if (!cached) throw new FetchError("GitHub returned 304 without a validated cache.", "CACHE_MISSING", false);
-          return { value: { raw: cached.raw, dataOrigin: "live" as const, revalidated: true, etag: cached.etag, lastModified: cached.last_modified },
+          return { value: { raw: cached.raw, dataOrigin: "live" as const, revalidated: true,
+            etag: response.headers.get("etag") ?? cached.etag,
+            lastModified: response.headers.get("last-modified") ?? cached.last_modified },
             summary: "HTTP 304 — validated cached body successfully revalidated", counts: { httpStatus: 304, bytes: 0 }, dataOrigin: "live" as const };
         }
         if (!response.ok) {
