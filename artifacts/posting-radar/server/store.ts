@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { pool, transaction, type Db } from "./db.js";
-import { defaults } from "./config.js";
+import { defaults, preferenceSchema } from "./config.js";
 import { Events, LostClaim } from "./events.js";
 import type { Run, TrackerEntry } from "../src/lib/api.js";
 export class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -25,7 +25,7 @@ export async function getRun(userId: string, id: string, includeResults = true):
   const isGuest = userId.startsWith("guest:");
   const matches = includeResults && isGuest ? (await pool.query(`SELECT id,posting,source_id AS "sourceId",season,reasons,
     data_origin AS "dataOrigin",created_at AS "createdAt" FROM radar_run_matches WHERE run_id=$1 ORDER BY created_at,id`, [id])).rows : undefined;
-  return { ...r.rows[0], sourceResults, isGuest, ...(includeResults ? { results, ...(isGuest ? { matches } : {}) } : {}) };
+  return { ...r.rows[0], preferences: preferenceSchema.parse(r.rows[0].preferences), sourceResults, isGuest, ...(includeResults ? { results, ...(isGuest ? { matches } : {}) } : {}) };
 }
 export async function createRun(userId: string, sourceIds: string[], key: string, revision: number, retryOf?: string) {
   const start = performance.now();
@@ -39,7 +39,7 @@ export async function createRun(userId: string, sourceIds: string[], key: string
     if (retryOf && !(await db.query("SELECT id FROM radar_runs WHERE id=$1 AND user_id=$2 AND state IN ('failed','interrupted','degraded')", [retryOf, userId])).rowCount) throw new HttpError(400, "Only your failed, interrupted, or degraded runs can be retried.");
     const id = randomUUID();
     await db.query(`INSERT INTO radar_runs(id,user_id,idempotency_key,requested_sources,preference_revision,preferences,state,retry_of)
-      VALUES($1,$2,$3,$4,$5,$6,'queued',$7)`, [id, userId, key, JSON.stringify(sourceIds), pref.revision, { ...pref.payload, revision: pref.revision }, retryOf || null]);
+      VALUES($1,$2,$3,$4,$5,$6,'queued',$7)`, [id, userId, key, JSON.stringify(sourceIds), pref.revision, preferenceSchema.parse({ ...pref.payload, revision: pref.revision }), retryOf || null]);
     for (const sourceId of sourceIds) {
       const cursor = (await db.query("SELECT snapshot_id FROM radar_cursors WHERE user_id=$1 AND source_id=$2", [userId, sourceId])).rows[0];
       await db.query(`INSERT INTO radar_run_sources(run_id,source_id,baseline_id,result)

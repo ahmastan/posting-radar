@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 export const roles = ["Software Engineering", "Product Management", "Data Science, AI & Machine Learning", "Quantitative Finance", "Hardware Engineering", "Mechanical Engineering", "Electrical Engineering", "Civil & Other Engineering", "Other"] as const;
 export interface Preferences {
-  revision: number; locations: string[]; workModel: "any" | "remote" | "hybrid" | "onsite"; pay: "any" | "paid" | "unpaid";
+  revision: number; locations: string[]; workModel: "any" | "remote" | "hybrid" | "onsite" | "nonremote" | "remote-listed"; pay: "any" | "paid" | "unpaid";
   roles: string[]; sponsorship: "any" | "required"; includeUnknown: boolean; excludedCompanies: string[];
 }
 export interface Source {

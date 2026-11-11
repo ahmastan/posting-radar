@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 import { marked } from "marked";
 import { createHash } from "node:crypto";
 import type { Posting, Preferences } from "../src/lib/api.js";
-export const PARSER_VERSION = 1;
+export const PARSER_VERSION = 2;
 export class ParseError extends Error { code = "PARSE_FAILED"; }
 export const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 export function canonicalUrl(input: string): string | null {
@@ -112,7 +112,7 @@ export function parseReadme(raw: string): Posting[] {
       if (/[🛂]/u.test(text) && !noSponsor || text.includes("🇺🇸") && !citizen || text.includes("🔒") && !closedLegend) {
         throw new ParseError(`Table ${tableIndex + 1}: unrecognized legend for eligibility/closed symbols.`);
       }
-      const links = idx.application >= 0 ? cells.eq(idx.application).find("a").map((_, a) => $(a).attr("href") || "").get() : [];
+      const links = cells.eq(idx.application >= 0 ? idx.application : idx.role).find("a").map((_, a) => $(a).attr("href") || "").get();
       const url = links.map(canonicalUrl).find(Boolean) || "";
       const closed = closedLegend && text.includes("🔒");
       const postedAt = idx.posted >= 0 ? parsePostedAt(cells.eq(idx.posted).text()) : undefined;
@@ -141,6 +141,8 @@ export function matchPosting(p: Posting, pref: Preferences): { matches: boolean;
   if (pref.workModel === "remote" && p.workModel !== "remote") excluded.push("Not listed as remote");
   if (pref.workModel === "hybrid" && p.workModel !== "hybrid") excluded.push("Not listed as hybrid");
   if (pref.workModel === "onsite" && ["remote", "hybrid"].includes(p.workModel)) excluded.push("Not in person");
+  if (pref.workModel === "nonremote" && p.remote) excluded.push("Remote excluded");
+  if (pref.workModel === "remote-listed" && !p.remote) excluded.push("Not listed as remote");
   if (pref.pay === "paid" && p.pay !== "paid") excluded.push("Not listed as paid");
   if (pref.pay === "unpaid" && p.pay !== "unpaid") excluded.push("Not listed as unpaid");
   if (!pref.includeUnknown && p.sponsorship === "unknown") excluded.push("Sponsorship unknown excluded");

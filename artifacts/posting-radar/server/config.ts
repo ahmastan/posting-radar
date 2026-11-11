@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizeLegacyPreferences } from "../src/lib/preference-compat.js";
 import type { Source, Preferences } from "../src/lib/api.js";
 export const sources: Source[] = [
   { id: "new-grad", name: "New Grad Positions", repo: "SimplifyJobs/New-Grad-Positions", branch: "dev", path: "README.md", season: "2025–2026 graduates", url: "https://github.com/SimplifyJobs/New-Grad-Positions/blob/dev/README.md", stars: 18351, available: true },
@@ -9,12 +10,12 @@ export const sources: Source[] = [
 ];
 export const roleNames = ["Software Engineering", "Product Management", "Data Science, AI & Machine Learning", "Quantitative Finance", "Hardware Engineering", "Mechanical Engineering", "Electrical Engineering", "Civil & Other Engineering", "Other"] as const;
 const list = z.array(z.string().trim().min(1).max(100)).max(50);
-export const preferenceSchema = z.object({
+export const preferenceSchema = z.preprocess(normalizeLegacyPreferences, z.object({
   revision: z.number().int().positive(), locations: list,
-  workModel: z.enum(["any", "remote", "hybrid", "onsite"]), pay: z.enum(["any", "paid", "unpaid"]),
+  workModel: z.enum(["any", "remote", "hybrid", "onsite", "nonremote", "remote-listed"]), pay: z.enum(["any", "paid", "unpaid"]),
   roles: z.array(z.enum(roleNames)).max(9),
   sponsorship: z.enum(["any", "required"]), includeUnknown: z.boolean(), excludedCompanies: list
-}).strict();
+}).strict());
 export const defaults: Preferences = {
   revision: 1, locations: [], workModel: "any", pay: "any", roles: [...roleNames],
   sponsorship: "any", includeUnknown: true, excludedCompanies: []

@@ -65,7 +65,7 @@ export function createRouter() {
   router.get("/preferences", async (_req, res) => {
     await ensureUser(res.locals.userId);
     const r = (await pool.query("SELECT revision,payload FROM radar_preferences WHERE user_id=$1", [res.locals.userId])).rows[0];
-    res.json({ ...r.payload, revision: r.revision });
+    res.json(preferenceSchema.parse({ ...r.payload, revision: r.revision }));
   });
   router.put("/preferences", async (req, res) => {
     await ensureUser(res.locals.userId);

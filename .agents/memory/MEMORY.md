@@ -1,1 +1,2 @@
 - [Posting Radar product rules](posting-radar-product.md) — genuine run telemetry, durable cross-device tracking, and separate read-only replay.
+- [Legacy filter semantics](legacy-filter-semantics.md) — preserve old remote filters and the meaning of Other when converting saved preferences and drafts.

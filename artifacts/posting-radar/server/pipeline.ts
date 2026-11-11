@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { pool, transaction } from "./db.js";
 import { resolveSource } from "./user-sources.js";
+import { preferenceSchema } from "./config.js";
 import { Events, errorInfo, LostClaim } from "./events.js";
 import { fetchSource, type Snapshot } from "./ingestion.js";
 import { parseReadme, matchPosting, hash, PARSER_VERSION } from "./parser.js";
@@ -10,6 +11,7 @@ import type { Posting, Preferences, SourceResult } from "../src/lib/api.js";
 export async function processRun(run: { id: string; user_id: string; preferences: Preferences; requested_sources: string[]; worker_token: string; created_at?: string },
   transport: typeof fetch = fetch
 ) {
+  run = { ...run, preferences: preferenceSchema.parse(run.preferences) };
   const events = new Events(run.id, performance.now() - (run.created_at ? Math.max(0, Date.now() - new Date(run.created_at).getTime()) : 0), run.worker_token);
   const results: SourceResult[] = [];
   const isGuest = run.user_id.startsWith("guest:");

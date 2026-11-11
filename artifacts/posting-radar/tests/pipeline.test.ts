@@ -47,6 +47,22 @@ test("first import, repeat, changed/reordered/reappearing rows and frozen revisi
   assert.equal(reappeared.totals.newSinceBaseline, 0);
   assert.equal((await pool.query("SELECT status,revision FROM radar_tracker WHERE id=$1", [entry.id])).rows[0].status, "applied");
 });
+test("stored legacy preferences are normalized before a sweep freezes and applies them", async () => {
+  await ensureUser("legacy-preferences");
+  const { workModel: _workModel, pay: _pay, ...oldPreferences } = defaults;
+  await pool.query("UPDATE radar_preferences SET payload=$2 WHERE user_id=$1", [
+    "legacy-preferences", { ...oldPreferences, remotePolicy: "exclude", roles: ["Other"] },
+  ]);
+  const raw = `| Company | Role | Location | Application | Work Model |
+| --- | --- | --- | --- | --- |
+| Acme | Mechanical Engineer | Remote | [Apply](https://example.org/legacy-remote) | Remote |
+| Acme | Mechanical Engineer | Boston | [Apply](https://example.org/legacy-hybrid) | Hybrid |`;
+  const result = await run("legacy-preferences", ["jobright-eng"], (async () => new Response(raw)) as typeof fetch);
+  assert.equal(result.preferences.workModel, "nonremote");
+  assert.equal(result.preferences.pay, "any");
+  assert.equal(result.totals.inserted, 1);
+  assert.equal(result.results![0].posting.url, "https://example.org/legacy-hybrid");
+});
 test("idempotent/concurrent requests, account isolation, active serialization", async () => {
   await ensureUser("u2");
   const ids = await Promise.all([createRun("u2", ["internships"], "same-key-001", 1), createRun("u2", ["internships"], "same-key-001", 1)]);

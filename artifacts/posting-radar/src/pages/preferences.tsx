@@ -116,7 +116,7 @@ export default function PreferencesPage() {
             className="w-full rounded-sm border bg-background p-3 font-mono text-sm outline-none focus:border-primary" />
           <fieldset className="mt-4">
             <legend className="mb-2 text-xs text-muted-foreground">Work model</legend>
-            <Seg value={draft.workModel} onChange={(v) => update({ workModel: v })} options={[["any", "Any"], ["remote", "Remote"], ["hybrid", "Hybrid"], ["onsite", "In person"]]} />
+            <Seg value={draft.workModel} onChange={(v) => update({ workModel: v })} options={[["any", "Any"], ["remote", "Remote"], ["hybrid", "Hybrid"], ["onsite", "In person"], ["nonremote", "Not remote"], ["remote-listed", "Remote listed"]]} />
           </fieldset>
           <fieldset className="mt-4">
             <legend className="mb-2 text-xs text-muted-foreground">Pay</legend>

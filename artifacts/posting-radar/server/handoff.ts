@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { pool, transaction } from "./db.js";
 import { Events } from "./events.js";
+import { preferenceSchema } from "./config.js";
 import { getRun, HttpError } from "./store.js";
 import type { GuestHandoff, GuestMatch, Preferences } from "../src/lib/api.js";
 export async function getGuestHandoff(userId: string, guestUserId: string | null, preferredRunId?: string): Promise<GuestHandoff> {
@@ -11,7 +12,7 @@ export async function getGuestHandoff(userId: string, guestUserId: string | null
     ORDER BY (id=$2::uuid) DESC NULLS LAST,created_at DESC LIMIT 1`, [guestUserId, preferredRunId || null])).rows[0];
   const run = row ? await getRun(guestUserId, row.id) : undefined;
   const imported = run ? !!(await pool.query("SELECT 1 FROM radar_guest_imports WHERE guest_run_id=$1 AND user_id=$2", [run.id, userId])).rowCount : false;
-  return { available: !!pref, guestUserId, preferences: pref ? { ...pref.payload, revision: pref.revision } as Preferences : undefined,
+  return { available: !!pref, guestUserId, preferences: pref ? preferenceSchema.parse({ ...pref.payload, revision: pref.revision }) : undefined,
     run, matches: run?.matches || [], imported };
 }
 export async function saveGuestMatches(userId: string, guestUserId: string | null, guestRunId: string) {
@@ -30,7 +31,7 @@ export async function saveGuestMatches(userId: string, guestUserId: string | nul
       data_origin AS "dataOrigin",created_at AS "createdAt" FROM radar_run_matches WHERE run_id=$1 ORDER BY id`, [guestRunId])).rows as (GuestMatch & {identity: string})[];
     const id = randomUUID();
     await db.query(`INSERT INTO radar_runs(id,user_id,idempotency_key,requested_sources,preference_revision,preferences,state)
-      VALUES($1,$2,$3,$4,$5,$6,'running')`, [id, userId, `guest-import:${guestRunId}`, JSON.stringify(guestRun.requested_sources), pref.revision, { ...pref.payload, revision: pref.revision }]);
+      VALUES($1,$2,$3,$4,$5,$6,'running')`, [id, userId, `guest-import:${guestRunId}`, JSON.stringify(guestRun.requested_sources), pref.revision, preferenceSchema.parse({ ...pref.payload, revision: pref.revision })]);
     const events = new Events(id, start);
     await events.append({ step: "request", phase: "started", fromLayer: "Page", toLayer: "Server", summary: "User explicitly requested saving the visible guest matches", elapsedRunMs: 0 }, db);
     await events.append({ step: "request", phase: "succeeded", fromLayer: "Server", toLayer: "Database", summary: "Explicit guest import request and account preference revision recorded; ingestion will not run", durationMs: performance.now() - start }, db);

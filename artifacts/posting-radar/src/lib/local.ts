@@ -1,4 +1,5 @@
 import type { Preferences } from "./api";
+import { normalizeLegacyPreferences } from "./preference-compat";
 
 export const parseLines = (text: string) =>
   text.split(/\n/).map((s) => s.trim()).filter(Boolean);
@@ -23,9 +24,9 @@ const memoryKeys = new Map<string, string>();
 export function readDraft(uid: string): PrefDraft | null {
   try {
     const raw = localStorage.getItem(draftKey(uid));
-    return raw ? (JSON.parse(raw) as PrefDraft) : (memoryDrafts.get(uid) ?? null);
+    return normalizeLegacyPreferences(raw ? JSON.parse(raw) : (memoryDrafts.get(uid) ?? null)) as PrefDraft | null;
   } catch {
-    return memoryDrafts.get(uid) ?? null;
+    return normalizeLegacyPreferences(memoryDrafts.get(uid) ?? null) as PrefDraft | null;
   }
 }
 export function writeDraft(uid: string, d: PrefDraft) {
